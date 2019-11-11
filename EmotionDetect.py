@@ -24,15 +24,21 @@ except:
 LABELS = ["neutral", "happy", "sad", "surprise", "anger"]
 
 
-def camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, vidfps):
+def camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, vidfps, precision):
     if device == 'CPU':
         plugin = IEPlugin(device="CPU")
         plugin.add_cpu_extension("./lib/libcpu_extension.so")
         print("successfully loaded CPU plugin")
-        model_xml = "./models/FP32/face-detection-retail-0004.xml"
-        model_bin = "./models/FP32/face-detection-retail-0004.bin"
-        emotion_model_xml = "./models/FP32/emotions-recognition-retail-0003.xml"
-        emotion_model_bin = "./models/FP32/emotions-recognition-retail-0003.bin"
+        if precision == "FP32":
+            model_xml = "./models/FP32/face-detection-retail-0004.xml"
+            model_bin = "./models/FP32/face-detection-retail-0004.bin"
+            emotion_model_xml = "./models/FP32/emotions-recognition-retail-0003.xml"
+            emotion_model_bin = "./models/FP32/emotions-recognition-retail-0003.bin"
+        elif precision == "INT8":
+            model_xml = "./models/INT8/face-detection-retail-0004.xml"
+            model_bin = "./models/INT8/face-detection-retail-0004.bin"
+            emotion_model_xml = "./models/INT8/emotions-recognition-retail-0003.xml"
+            emotion_model_bin = "./models/INT8/emotions-recognition-retail-0003.bin"
     if device == "MYRIAD":
         plugin = IEPlugin(device="MYRIAD")
         print("Successfully loaded MYRIAD plugin")
@@ -165,6 +171,8 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--device', dest='device', type=str, default='CPU',
                     help='Device to run inference on. Valid choices are CPU or MYRIAD. Default=CPU')
+parser.add_argument('-p', '--precision', dest='precision', type=str, default='FP32',
+                    help='Precision of model to be used. Options are FP32 and INT8. Default:FP32')
 parser.add_argument('-cn', '--numberofcamera', dest='number_of_camera', type=int, default=0,
                     help='USB camera number. (Default=0)')
 parser.add_argument('-wd', '--width', dest='camera_width', type=int, default=640,
@@ -178,6 +186,7 @@ parser.add_argument('-vidfps', '--fpsofvideo', dest='fps_of_video', type=int, de
 
 args = parser.parse_args()
 device = args.device
+precision = args.precision
 number_of_camera = args.number_of_camera
 camera_width = args.camera_width
 camera_height = args.camera_height
@@ -186,4 +195,4 @@ if device == 'MYRIAD' and number_of_ncs < 1:
     number_of_ncs = 1
 vidfps = args.fps_of_video
 
-camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, vidfps)
+camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, vidfps, precision)
