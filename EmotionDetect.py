@@ -24,7 +24,7 @@ except:
 LABELS = ["neutral", "happy", "sad", "surprise", "anger"]
 
 
-def camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, vidfps, precision):
+def camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, video, precision):
     if device == 'CPU':
         plugin = IEPlugin(device="CPU")
         plugin.add_cpu_extension("./lib/libcpu_extension.so")
@@ -56,9 +56,13 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
     emotion_exec_net = plugin.load(network=emotionNet)
     print("Successfully loaded emotion model")
 
-    cap = cv2.VideoCapture(number_of_camera)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
+    if video == "":
+        cap = cv2.VideoCapture(number_of_camera)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_height)
+    else:
+        cap = cv2.VideoCapture(video)
+
     cv2.namedWindow('frame')
     i = 0
     start = datetime.now()
@@ -160,7 +164,7 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
         i = i + 1
-        if i > 30:
+        if int((datetime.now() - start).total_seconds()) > 0:
             fps = i / int((datetime.now() - start).total_seconds())
             print(fps)
 
@@ -175,24 +179,26 @@ parser.add_argument('-p', '--precision', dest='precision', type=str, default='FP
                     help='Precision of model to be used. Options are FP32 and INT8. Default:FP32')
 parser.add_argument('-cn', '--numberofcamera', dest='number_of_camera', type=int, default=0,
                     help='USB camera number. (Default=0)')
+parser.add_argument('-vd', '--video', dest='video', type=str, default='',
+                    help='File name of video file to test on. Default:blank')
 parser.add_argument('-wd', '--width', dest='camera_width', type=int, default=640,
                     help='Width of the frames in the video stream. (Default=640)')
 parser.add_argument('-ht', '--height', dest='camera_height', type=int, default=480,
                     help='Height of the frames in the video stream. (Default=480)')
 parser.add_argument('-numncs', '--numberofncs', dest='number_of_ncs', type=int, default=0,
                     help='Number of NCS. (Default=0, unless device is MYRIAD, then Default=1)')
-parser.add_argument('-vidfps', '--fpsofvideo', dest='fps_of_video', type=int, default=30,
-                    help='FPS of Video. (Default=30)')
+
 
 args = parser.parse_args()
 device = args.device
 precision = args.precision
 number_of_camera = args.number_of_camera
+video = args.video
 camera_width = args.camera_width
 camera_height = args.camera_height
 number_of_ncs = args.number_of_ncs
 if device == 'MYRIAD' and number_of_ncs < 1:
     number_of_ncs = 1
-vidfps = args.fps_of_video
 
-camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, vidfps, precision)
+
+camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, video, precision)
