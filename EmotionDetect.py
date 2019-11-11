@@ -167,7 +167,7 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
         if int((datetime.now() - start).total_seconds()) > 0:
             fps = i / int((datetime.now() - start).total_seconds())
             print(fps)
-    print("Total time: " + int(datetime.now() - start))
+    print("Total time: " + str(datetime.now() - start))
     cap.release()
     cv2.destroyAllWindows()
 
