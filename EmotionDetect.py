@@ -49,6 +49,7 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
 
     net = IENetwork(model=model_xml, weights=model_bin)
     input_blob = next(iter(net.inputs))
+    output_blob = next(iter(net.outputs))
     Exec_net = plugin.load(network=net)
     print("successfully loaded face model")
     emotionNet = IENetwork(model=emotion_model_xml, weights=emotion_model_bin)
@@ -75,7 +76,9 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
             prepimg = cv2.resize(frame, (300, 300))
             prepimg = prepimg[np.newaxis, :, :, :]  # Batch size axis add
             prepimg = prepimg.transpose((0, 3, 1, 2))  # NHWC to NCHW
-            outputs = Exec_net.infer(inputs={input_blob: prepimg})
+            infer_request_handle = Exec_net.start_async(request_id=0, inputs={input_blob: prepimg})
+            infer_status = infer_request_handle.wait()
+            outputs = infer_request_handle.outputs
             for k, v in outputs.items():
                 # print(str(k) + ' is key to value ' + str(v))
                 # print(type(v))
