@@ -160,6 +160,8 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
 
             print("show image")
             cv2.imshow('frame', frame)
+        else:
+            break
             # print("show frame")
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
