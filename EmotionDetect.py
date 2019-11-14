@@ -53,7 +53,8 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
     Exec_net = plugin.load(network=net)
     print("successfully loaded face model")
     emotionNet = IENetwork(model=emotion_model_xml, weights=emotion_model_bin)
-    emotion_input_blob = next(iter(net.inputs))
+    emotion_input_blob = next(iter(emotionNet.inputs))
+    emotion_output_blob = next(iter(emotionNet.outputs))
     emotion_exec_net = plugin.load(network=emotionNet)
     print("Successfully loaded emotion model")
 
@@ -78,86 +79,93 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
             prepimg = prepimg.transpose((0, 3, 1, 2))  # NHWC to NCHW
             infer_request_handle = Exec_net.start_async(request_id=0, inputs={input_blob: prepimg})
             infer_status = infer_request_handle.wait()
-            outputs = infer_request_handle.outputs
-            for k, v in outputs.items():
-                # print(str(k) + ' is key to value ' + str(v))
-                # print(type(v))
-                # print(v.flatten())
-                # print(type(v.flatten()))
-
-                j = 0
-                while float(v.flatten()[j + 2]) > .9:
-                    image_id = v.flatten()[j]
-                    label = v.flatten()[j + 1]
-                    conf = v.flatten()[j + 2]
-                    boxTopLeftX = v.flatten()[j + 3] * frame.shape[1]
-                    boxTopLefty = v.flatten()[j + 4] * frame.shape[0]
-                    boxBottomRightX = v.flatten()[j + 5] * frame.shape[1]
-                    boxBottomRightY = v.flatten()[j + 6] * frame.shape[0]
-                    faces.append(
-                        [conf, (int(boxTopLeftX), int(boxTopLefty)), (int(boxBottomRightX), int(boxBottomRightY))])
-                    j = j + 7
-
-                for face in faces:
-                    prepimg = frame[face[1][1]:face[2][1], face[1][0]:face[2][0]]
-                    prepimg = cv2.resize(frame, (64, 64))
-                    prepimg = prepimg[np.newaxis, :, :, :]  # Batch size axis add
-                    prepimg = prepimg.transpose((0, 3, 1, 2))  # NHWC to NCHW
-                    emotion_outputs = emotion_exec_net.infer(inputs={emotion_input_blob: prepimg})
-                    for keys, values in emotion_outputs.items():
-                        emotion_probs = values.flatten()
-                        # most_prob_emotion = emotion_probs
-                        emotion = LABELS[int(np.argmax(emotion_probs))]
-                        prob = float(values.flatten()[int(np.argmax(values.flatten()))]) * 100
-                        print(emotion)
-                        neutral = emotion_probs[0]
-                        happy = emotion_probs[1]
-                        sad = emotion_probs[2]
-                        surprise = emotion_probs[3]
-                        anger = emotion_probs[4]
-                        prob_scale_x = face[1][0] - 100
+            outputs = infer_request_handle.outputs[output_blob]
+            outputs = outputs.flatten()
+            j = 0
+            while float(outputs[j + 2] > .9):
+                image_id = outputs[j]
+                label = outputs[j + 1]
+                conf = outputs[j + 2]
+                boxTopLeftX = outputs[j + 3] * frame.shape[1]
+                boxTopLeftY = outputs[j + 4] * frame.shape[0]
+                boxBottomRightX = outputs[j + 5] * frame.shape[1]
+                boxBottomRightY = outputs[j + 6] * frame.shape[0]
+                faces.append([conf, (int(boxTopLeftX), int(boxTopLeftY)), (int(boxBottomRightX), int(boxBottomRightY))])
+                j = j + 7
+            #Loop through faces and async infer, adding each handler to a dict. Then go through dict and draw on frame.
+            emotion_results = []
+            request_handler = None
+            for index, face in enumerate(faces):
+                prepimg = frame[face[1][1]:face[2][1], face[1][0]:face[2][0]]
+                prepimg = cv2.resize(frame, (64, 64))
+                prepimg = prepimg[np.newaxis, :, :, :]  # Batch size axis add
+                prepimg = prepimg.transpose((0, 3, 1, 2))  # NHWC to NCHW
+                if index > 0:
+                    emotion_outputs_status = request_handler[0].wait()
+                    emotion_results.append((request_handler[0].outputs[emotion_output_blob].flatten(),
+                                            request_handler[1]))
+                request_handler = (emotion_exec_net.start_async(request_id=0, inputs={emotion_input_blob: prepimg}),
+                                           face)
+                print("started async infer")
+            if request_handler:
+                emotion_outputs_status = request_handler[0].wait()
+                emotion_results.append(emotion_results.append((request_handler[0].outputs[emotion_output_blob].flatten(),
+                                            request_handler[1])))
+            for emotion_result in emotion_results:
+                if emotion_result != None:
+                    emotion_probs = emotion_result[0]
+                    face = emotion_result[1]
+                    emotion = LABELS[int(np.argmax(emotion_probs))]
+                    prob = float(emotion_probs[int(np.argmax(emotion_probs))]) * 100
+                    print(emotion)
+                    neutral = emotion_probs[0]
+                    happy = emotion_probs[1]
+                    sad = emotion_probs[2]
+                    surprise = emotion_probs[3]
+                    anger = emotion_probs[4]
+                    prob_scale_x = face[1][0] - 100
 
                     frame = cv2.rectangle(np.array(frame), face[1], face[2], (0, 0, 255), 1)
                     frame = cv2.rectangle(np.array(frame), (face[1][0] - 100, face[1][1]),
-                                          (face[1][0], face[1][1] + 50),
-                                          (0, 0, 255), cv2.FILLED)
+                                              (face[1][0], face[1][1] + 50),
+                                              (0, 0, 255), cv2.FILLED)
 
                     frame = cv2.rectangle(np.array(frame), (prob_scale_x, face[1][1]),
-                                          (face[1][0] + int(neutral * 100 - 100), face[1][1] + 10),
-                                          (0, 255, 0), cv2.FILLED)
+                                              (face[1][0] + int(neutral * 100 - 100), face[1][1] + 10),
+                                              (0, 255, 0), cv2.FILLED)
                     frame = cv2.putText(frame, "Neutral", (prob_scale_x + 60, face[1][1] + 7), cv2.FONT_HERSHEY_SIMPLEX,
-                                        .3, (0, 0, 0), 1)
+                                            .3, (0, 0, 0), 1)
 
                     frame = cv2.rectangle(np.array(frame), (prob_scale_x, face[1][1] + 10),
-                                          (face[1][0] + int(happy * 100 - 100), face[1][1] + 20),
-                                          (0, 255, 0), cv2.FILLED)
+                                              (face[1][0] + int(happy * 100 - 100), face[1][1] + 20),
+                                              (0, 255, 0), cv2.FILLED)
                     frame = cv2.putText(frame, "Happy", (prob_scale_x + 60, face[1][1] + 17), cv2.FONT_HERSHEY_SIMPLEX,
-                                        .3, (0, 0, 0), 1)
+                                            .3, (0, 0, 0), 1)
 
                     frame = cv2.rectangle(np.array(frame), (prob_scale_x, face[1][1] + 20),
-                                          (face[1][0] + int(sad * 100 - 100), face[1][1] + 30),
-                                          (0, 255, 0), cv2.FILLED)
+                                              (face[1][0] + int(sad * 100 - 100), face[1][1] + 30),
+                                              (0, 255, 0), cv2.FILLED)
                     frame = cv2.putText(frame, "Sad", (prob_scale_x + 60, face[1][1] + 27), cv2.FONT_HERSHEY_SIMPLEX,
-                                        .3, (0, 0, 0), 1)
+                                            .3, (0, 0, 0), 1)
 
                     frame = cv2.rectangle(np.array(frame), (prob_scale_x, face[1][1] + 30),
-                                          (face[1][0] + int(surprise * 100 - 100), face[1][1] + 40),
-                                          (0, 255, 0), cv2.FILLED)
+                                              (face[1][0] + int(surprise * 100 - 100), face[1][1] + 40),
+                                              (0, 255, 0), cv2.FILLED)
                     frame = cv2.putText(frame, "Surprise", (prob_scale_x + 60, face[1][1] + 37), cv2.FONT_HERSHEY_SIMPLEX,
-                                        .3, (0, 0, 0), 1)
+                                            .3, (0, 0, 0), 1)
 
                     frame = cv2.rectangle(np.array(frame), (prob_scale_x, face[1][1] + 40),
-                                          (face[1][0] + int(anger * 100 - 100), face[1][1] + 50),
-                                          (0, 255, 0), cv2.FILLED)
+                                              (face[1][0] + int(anger * 100 - 100), face[1][1] + 50),
+                                              (0, 255, 0), cv2.FILLED)
                     frame = cv2.putText(frame, "Anger", (prob_scale_x + 60, face[1][1] + 47), cv2.FONT_HERSHEY_SIMPLEX,
-                                        .3, (0, 0, 0), 1)
+                                            .3, (0, 0, 0), 1)
 
                     if prob > 60:
                         frame = cv2.putText(frame, emotion + "  confidence: " + "%.2f" % prob + "%",
-                                            (face[1][0], face[1][1] - 2), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 255), 1,
-                                            cv2.LINE_AA)
+                                                (face[1][0], face[1][1] - 2), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 255), 1,
+                                                cv2.LINE_AA)
 
-                    # print(str(face[0]))
+                        # print(str(face[0]))
 
             frame = cv2.putText(frame, "FPS: " + "%.2f" % fps, (0, 15), cv2.FONT_HERSHEY_SIMPLEX, .5, (0, 0, 255), 1)
 
