@@ -101,7 +101,11 @@ def camThread(device, number_of_camera, camera_width, camera_height, number_of_n
                 prepimg = prepimg[np.newaxis, :, :, :]  # Batch size axis add
                 prepimg = prepimg.transpose((0, 3, 1, 2))  # NHWC to NCHW
                 if index > 0:
+                    start_time = datetime.now()
+                    print("Waiting")
                     emotion_outputs_status = request_handler[0].wait()
+                    end_time = datetime.now()
+                    print(end_time - start_time)
                     emotion_results.append((request_handler[0].outputs[emotion_output_blob].flatten(),
                                             request_handler[1]))
                 request_handler = (emotion_exec_net.start_async(request_id=0, inputs={emotion_input_blob: prepimg}),
