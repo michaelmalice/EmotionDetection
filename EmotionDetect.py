@@ -1,8 +1,8 @@
 import sys
 import numpy as np
 import cv2, io, time, argparse, re
-from os import system
-from os.path import isfile, join
+import os
+import platform
 from time import sleep
 import multiprocessing as mp
 from datetime import datetime
@@ -27,7 +27,11 @@ LABELS = ["neutral", "happy", "sad", "surprise", "anger"]
 def camThread(device, number_of_camera, camera_width, camera_height, number_of_ncs, video, precision):
     if device == 'CPU':
         plugin = IEPlugin(device="CPU")
-        plugin.add_cpu_extension("./lib/libcpu_extension.so")
+        if platform.system() == "Linux":
+            plugin.add_cpu_extension('./lib/libcpu_extension.so')
+        elif platform.system() == "Windows":
+            print(os.getcwd())
+            plugin.add_cpu_extension(os.getcwd() + '\\lib\\cpu_extension.dll')
         print("successfully loaded CPU plugin")
         if precision == "FP32":
             model_xml = "./models/FP32/face-detection-retail-0004.xml"
